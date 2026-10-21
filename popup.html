@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body{width:290px;margin:0;padding:12px 14px 14px;background:#15202b;color:#e7e9ea;
+      font:13px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif}
+    header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+    header img{width:22px;height:22px;border-radius:6px}
+    header h1{font-size:14px;margin:0}
+    h2{font-size:11px;color:#8b98a5;margin:12px 0 4px;text-transform:uppercase;letter-spacing:.5px}
+    #info{background:rgba(29,155,240,.12);border-radius:10px;padding:8px 10px;font-size:12px;color:#9ec5dd}
+    #info.warn{background:rgba(244,33,46,.12);color:#f0a2a9}
+    #toggle{width:100%;padding:9px 0;margin-top:10px;border:none;border-radius:999px;cursor:pointer;
+      font:700 14px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif}
+    #toggle:disabled{opacity:.45;cursor:not-allowed}
+    #toggle.run{background:#f4212e;color:#fff}
+    #toggle.stp{background:#38444d;color:#e7e9ea}
+    .seg{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+    .seg label{display:flex;align-items:center;gap:6px;background:rgba(56,68,77,.4);
+      border-radius:8px;padding:7px 9px;cursor:pointer;font-size:12px}
+    .seg input{accent-color:#1d9bf0}
+    .seg label:has(input:checked){background:rgba(29,155,240,.25);outline:1px solid #1d9bf0}
+    .acts{display:flex;gap:6px;margin-top:8px}
+    .acts button{flex:1;padding:7px 0;border:none;border-radius:999px;cursor:pointer;
+      font:600 12px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif}
+    #csv{background:#340c10;color:#f4212e;border:1px solid #5b2b30}
+    #unf{background:#5b7083;color:#fff}
+    #unf.busy{background:#f4212e;color:#fff}
+    #list{background:#1d9bf0;color:#fff}
+    .acts button:disabled{opacity:.4;cursor:not-allowed}
+    .acts button, #ig-add, #ig-clear{transition:transform 160ms cubic-bezier(0.23,1,0.32,1),
+      background-color 150ms ease, color 150ms ease, border-color 150ms ease}
+    .acts button:not(:disabled):active, #ig-add:active, #ig-clear:active{transform:scale(0.96)}
+    @media (prefers-reduced-motion: reduce){
+      .acts button:not(:disabled):active, #ig-add:active, #ig-clear:active{transform:none}
+    }
+    #toggle{transition:transform 160ms cubic-bezier(0.23,1,0.32,1), background-color 150ms ease}
+    #toggle:not(:disabled):active{transform:scale(0.96)}
+    @media (prefers-reduced-motion: reduce){#toggle:not(:disabled):active{transform:none}}
+    #stats{margin-top:10px;font-size:12px;color:#8b98a5}
+    #stats b{color:#fff}
+    #stats .nf{color:#f4212e;font-weight:700}
+    footer{margin-top:12px;font-size:10.5px;color:#5b7083;text-align:center}
+    .off{opacity:.4;pointer-events:none}
+    #ig-sec{margin-top:10px;display:none}
+    #ig-sec h3{font-size:11px;color:#8b98a5;margin:10px 0 4px;text-transform:uppercase;letter-spacing:.5px}
+    #ig-list{max-height:150px;overflow-y:auto;overscroll-behavior:contain;background:rgba(0,0,0,.2);border:1px solid #38444d;border-radius:8px;padding:2px 0}
+    #ig-row{display:flex;align-items:center;gap:6px;padding:4px 8px;font-size:12px;transition:background-color 150ms ease}
+    #ig-row:hover{background:rgba(29,155,240,.07)}
+    #ig-row b{color:#1d9bf0;font-weight:600;white-space:nowrap}
+    #ig-row .nm{color:#8b98a5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+    #ig-row .ig-x{margin-left:auto;background:none;border:none;color:#5b7083;cursor:pointer;font-size:12px;padding:2px 4px}
+    #ig-row .ig-x:hover{color:#f4212e}
+    .ig-empty{padding:6px 8px;color:#5b7083;font-size:11.5px}
+    #ig-add-row{display:flex;gap:6px;margin-top:6px}
+    #ig-input{flex:1;background:#1c2732;border:1px solid #38444d;color:#e7e9ea;border-radius:8px;padding:6px 8px;font-size:12px;outline:none}
+    #ig-input:focus{border-color:#1d9bf0}
+    #ig-add,#ig-clear{background:#38444d;color:#e7e9ea;border:none;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px}
+    #ig-add:hover,#ig-clear:hover{filter:brightness(1.15)}
+    #ig-clear.armed{background:#f4212e;color:#fff}
+  </style>
+</head>
+<body>
+  <header>
+    <img src="icons/icon48.png" alt="logo">
+    <h1>X Takip Denetimi</h1>
+  </header>
+
+  <div id="info">…</div>
+
+  <button id="toggle" class="run">▶ Başlat</button>
+
+  <div id="controls" class="off">
+    <h2>Mod</h2>
+    <div class="seg">
+      <label><input type="radio" name="mode" value="nf">   Kırmızı işaret</label>
+      <label><input type="radio" name="mode" value="dim">  Sönükleştir</label>
+      <label><input type="radio" name="mode" value="only"> Sadece etmeyenler</label>
+      <label><input type="radio" name="mode" value="off">  Kapalı</label>
+    </div>
+    <div class="acts">
+      <button id="list">☰ Liste paneli</button>
+      <button id="csv">⬇ CSV</button>
+      <button id="unf" disabled>🧹 Çıkar</button>
+    </div>
+    <h2>Özet</h2>
+    <div id="stats">Henüz tarama yok.</div>
+  </div>
+
+  <div id="ig-sec">
+    <h3>🚫 Yoksayma listesi (<span id="ig-n">0</span>)</h3>
+    <div id="ig-list"></div>
+    <div id="ig-add-row">
+      <input id="ig-input" type="text" placeholder="Elle ekle: @handle" spellcheck="false">
+      <button id="ig-add" title="Yoksayma listesine ekle">➕</button>
+      <button id="ig-clear" title="Tüm yoksayılanları sil">🗑</button>
+    </div>
+  </div>
+
+  <footer>Yalnızca ▶ Başlat'a bastığında çalışır · v1.0.0</footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
