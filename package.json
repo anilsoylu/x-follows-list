@@ -1,0 +1,11 @@
+{
+  "name": "x-follows-list",
+  "version": "1.0.0",
+  "private": true,
+  "description": "X Takip Denetimi — Chrome-only following checker (MV3). No dependencies.",
+  "scripts": {
+    "check": "node --check background.js && node --check content.js && node --check popup.js && node -e \"JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest.json OK')\"",
+    "bench": "bash bench/run.sh results-latest",
+    "release": "npm run check && rm -rf dist && mkdir -p dist && zip -r -X -q \"dist/x-follows-list-v$(node -e \"console.log(require('./manifest.json').version)\").zip\" background.js content.js popup.html popup.js manifest.json icons README.md -x '*.DS_Store'"
+  }
+}

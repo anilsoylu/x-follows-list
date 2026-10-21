@@ -6,6 +6,8 @@ It only runs when you press **▶ Start**. When you press stop (or leave the pag
 
 ## Install
 
+> **Chrome only, v110+** (Firefox/Safari are not supported — this extension uses Chrome's MV3 service-worker background model).
+
 1. Open `chrome://extensions`
 2. Enable **Developer mode**
 3. Click **Load unpacked** and select this folder

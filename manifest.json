@@ -3,6 +3,7 @@
   "name": "X Takip Denetimi — Following Checker",
   "short_name": "Takip Denetimi",
   "version": "1.0.0",
+  "minimum_chrome_version": "110",
   "description": "Kendi X 'Takip Edilenler' sayfanda seni takip etmeyen hesapları bulur: işaretler, listeler ve CSV indirir. Yalnızca 'Başlat' dediğinde çalışır.",
   "permissions": ["storage"],
   "host_permissions": ["https://x.com/*", "https://twitter.com/*"],

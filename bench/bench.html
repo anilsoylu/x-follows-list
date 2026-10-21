@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>XFL perf bench</title>
+<style>
+  body { font: 13px/1.5 -apple-system, system-ui, sans-serif; margin: 16px; background: #fff; color: #111; }
+  #stage { position: absolute; left: -99999px; top: 0; } /* cells stay connected but offscreen */
+  table { border-collapse: collapse; margin-top: 12px; }
+  td, th { border: 1px solid #ccc; padding: 4px 10px; text-align: right; }
+  th { background: #f6f6f6; }
+  td:first-child, th:first-child { text-align: left; }
+  .pass { color: #0a7d0a; font-weight: 600; }
+  .fail { color: #c00; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>XFL perf bench</h1>
+  <div id="results">running…</div>
+  <div id="stage"></div>
+
+  <script>window.__t0 = performance.now();</script>
+  <!-- boot_ms measures stub + real content.js evaluation -->
+  <script src="chrome-stub.js"></script>
+  <script src="../content.js"></script>
+  <script>window.__bootMs = +(performance.now() - window.__t0).toFixed(2);</script>
+  <script src="bench.js"></script>
+</body>
+</html>

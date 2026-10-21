@@ -30,6 +30,7 @@
     off:  'Kapalı'
   };
   const MAX_LIST_ROWS = 500;   // panelde gösterilir, CSV'de hepsi var
+  const UNF_MAX_SESSION = 100; // tek oturumda en fazla bu kadar takipten çıkarma
   const UNF_PAUSE = () => 2200 + Math.floor(Math.random() * 1800); // adım arası bekleme
 
   const S = {
@@ -49,6 +50,8 @@
     debT: null,
     styleEl: null,
     widget: null,
+    wrefs: null,                 // widget DOM referansları (paint/renderList cache)
+    listSig: '',                 // renderList çıktı imzası (değişmedıyse rebuild atla)
     listOpen: false,
     zeroScans: 0
   };
@@ -81,8 +84,8 @@
     fn(t.objectStore('ignored')).onsuccess = () => res();
     t.onerror = () => rej(t.error);
   }));
-  const idbPut  = (h) => tx('readwrite', (st) => st.put({ h })).catch(() => {});
-  const idbDel  = (h) => tx('readwrite', (st) => st.delete(h)).catch(() => {});
+  const idbPut  = (h) => tx('readwrite', (st) => st.put({ h })).catch(() => { hintOnce('Yoksayma kaydı kaydedilemedi.', 2000); });
+  const idbDel  = (h) => tx('readwrite', (st) => st.delete(h)).catch(() => { hintOnce('Yoksayma kaydı silinemedi.', 2000); });
   function idbAll() {
     return db().then((d) => new Promise((res, rej) => {
       const rq = d.transaction('ignored').objectStore('ignored').getAll();
@@ -90,7 +93,11 @@
       rq.onerror = () => rej(rq.error);
     })).catch(() => []);
   }
-  idbAll().then((rows) => { for (const r of rows) S.ignored.add(r.h); });
+  // Yoksayma listesi yüklemesi; toplu takipten çıkarma bunu bekler (yarış koruması)
+  const igReady = idbAll().then((rows) => {
+    for (const r of rows) S.ignored.add(r.h);
+    return true;
+  });
 
   // ------------------------------------------------------------------
   // CSS: yüzen widget + satır düğmeleri + nabız animasyonu
@@ -273,6 +280,14 @@
   // ------------------------------------------------------------------
   const HOVER = { h: null };
 
+  // mousemove'u frame başına tek handler'a indiren rAF throttle (perf)
+  let hoverEvt = null;
+  let hoverRaf = 0;
+  function scheduleHover(e) {
+    hoverEvt = e;
+    if (!hoverRaf) hoverRaf = requestAnimationFrame(() => { hoverRaf = 0; onHoverMove(hoverEvt); });
+  }
+
   function buildHoverButton() {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -298,7 +313,6 @@
     HOVER.h = null;
     if (S.hoverBtn) {
       S.hoverBtn.style.display = 'none';
-      S.hoverBtn.classList.remove('show');
     }
   }
 
@@ -319,7 +333,6 @@
     const on = S.ignored.has(h);
     S.hoverBtn.classList.toggle('on', on);
     S.hoverBtn.textContent = on ? '🚫 Yoksayıldı' : 'Ø Yoksay';
-    if (!S.hoverBtn.classList.contains('show')) S.hoverBtn.classList.add('show');
     S.hoverBtn.style.display = 'block';
 
     // Following düğmesinin solunda, dikeyde ortalı, çakışmadan
@@ -347,11 +360,14 @@
     S.nfRows = [];
     const touched = new Set();
 
-    const cells = document.querySelectorAll('[data-testid="UserCell"]');
-    for (const cell of cells) {
-      // "unfollow" düğmesi = biz onu takip ediyoruz (takip edilenler listesindeyiz)
-      const unfollow = cell.querySelector('button[data-testid$="-unfollow"]');
-      if (!unfollow) continue; // "Follow" düğmeli satırlar (öneriler vb.) atlanır
+    // "unfollow" düğmesi olan hücreler = bizim takip ettiklerimiz. Tek sorguda
+    // toplanır (Follow düğmeli öneri satırları bu listede zaten yoktur); böylece
+    // hücre başına ayrı button/avatar sorgusu yapılmaz. Bu aynı zamanda
+    // querySelectorAll'ın dokümandaki (yukarıdan aşağıya) görsel sıradır.
+    const unfollowBtns = document.querySelectorAll('[data-testid="UserCell"] button[data-testid$="-unfollow"]');
+    for (const unfollow of unfollowBtns) {
+      const cell = unfollow.closest('[data-testid="UserCell"]');
+      if (!cell) continue; // savunmacı: beklenmedik DOM yapısı
 
       const avatar = cell.querySelector('div[data-testid^="UserAvatar-Container-"]');
       if (!avatar) continue;
@@ -379,7 +395,7 @@
       else if (cell.dataset.xfl) { delete cell.dataset.xfl; touched.add(cell); }
 
       if (!followsYou && !isIgn) {
-        S.nfRows.push({ el: cell, h: hLower, y: yOf(cell) });
+        S.nfRows.push({ el: cell, h: hLower }); // push sırası = doküman (görsel) sırası; artık sort/yOf yok
       }
 
       S.seen.set(hLower, { name, followsYou, ignored: isIgn });
@@ -391,8 +407,10 @@
     }
     S.marked = touched;
 
-    // Sayfadaki gerçek (yukarıdan aşağıya) sıra
-    S.nfRows.sort((a, b) => a.y - b.y);
+    // Sıralama notu: nfRows doküman sırasıyla (forun yukarısındaki sorgudan)
+    // dolmuştur; X timeline'ında DOM sırası = görsel sıra. Eskiden her scan'de
+    // satır başına getBoundingClientRect (forced layout) yapılıyordu — ölçümde
+    // ana maliyet buydu, artık yok. yOf yalnız "Sonraki" atlama anında kullanılır.
 
     // "only" modunda görünen konteynerleri gizle (takip edenler + yoksayılanlar).
     // Not: mod dışındaysa daha önce gizlenenleri MUTLAKA geri koy — aksi halde
@@ -552,7 +570,7 @@
     w.appendChild(igLink);
 
     S.hoverBtn = buildHoverButton();
-    document.addEventListener('mousemove', onHoverMove, true);
+    document.addEventListener('mousemove', scheduleHover, true);
     document.addEventListener('scroll', hideHover, true);
 
     x.addEventListener('click', () => stop(true));
@@ -562,10 +580,14 @@
       if (S.unf.running) { S.unf.stop = true; return; }
       const n = S.nfCount;
       if (!n) { hintOnce('Eyleme açık "takip etmeyen" yok. Önce listeyi kaydırarak tarayın.', 2600); return; }
-      if (!confirm(`${n} hesabı takipten çıkarılacak.\n\n• Yoksaydıkların (🚫) atlanır.\n• Her chağrı adımında onay penceresi açılır.\n\nDevam edilsin mi?`)) return;
+      if (!confirm(`${n} hesabı takipten çıkarılacak.\n\n• Yoksaydıkların (🚫) atlanır.\n• Her adımda onay penceresi açılır.\n\nDevam edilsin mi?`)) return;
       runUnfollow();
     });
-    bList.addEventListener('click', () => { S.listOpen = !S.listOpen; list.hidden = !S.listOpen; paint(); if (S.listOpen) renderList(); });
+    bList.addEventListener('click', () => {
+      S.listOpen = !S.listOpen; list.hidden = !S.listOpen;
+      if (!S.listOpen) S.listSig = '';
+      paint(); if (S.listOpen) renderList();
+    });
     bCsv.addEventListener('click', saveCsv);
 
     // Liste panelinde: ✕ ile yoksaymadan çıkar; satır (bağlantı değil) tıklanınca o satıra atla
@@ -587,31 +609,29 @@
 
     S.widget = w;
     S.listEl = list;
-    S.bUnfEl = bUnf;
-    S.igLinkEl = igLink;
+    // Referanslar bir kez çözülür; paint/renderList her scan'de artık DOM
+    // sorgusu yapmaz (8 querySelector × scan tasarrufu).
+    S.wrefs = { dot, owner, stats, hint, list, lh, lb, igLink, bList, bUnf };
     paint();
   }
 
   function widgetRefs() {
-    if (!S.widget) return null;
-    return {
-      dot: S.widget.querySelector('#xfl-dot'),
-      owner: S.widget.querySelector('#xfl-owner'),
-      stats: S.widget.querySelector('#xfl-stats'),
-      hint: S.widget.querySelector('#xfl-hint'),
-      list: S.widget.querySelector('#xfl-list'),
-      lh: S.widget.querySelector('#xfl-list-h'),
-      lb: S.widget.querySelector('#xfl-list-body'),
-      igLink: S.widget.querySelector('#xfl-ig-link'),
-      bList: S.widget.querySelector('#xfl-b-list'),
-      bUnf: S.widget.querySelector('#xfl-b-unf')
-    };
+    return S.wrefs;
   }
+
+  let lastPaintSig = '';
 
   function paint() {
     const r = widgetRefs();
     if (!r) return;
     const def = pathMatch();
+    // Çıktıyı besleyen tüm girdiler — imza değişmedıyse DOM'a dokunma (perf)
+    const sig = [
+      S.unf.running, S.unf.done, S.screen.total, S.screen.follow, S.screen.noFollow,
+      S.ignored.size, S.nfCount, S.listOpen, S.owner, def ? def[1] : null, S.zeroScans >= 3
+    ].join('|');
+    if (sig === lastPaintSig) return;
+    lastPaintSig = sig;
 
     // Durum noktası + alt bilgi: @sahip · mod
     r.dot.classList.toggle('busy', S.unf.running);
@@ -666,6 +686,14 @@
 
     // Yoksayılanlar: IndexedDB'deki TÜM kayıtlar (bu sayfada görülmemişler dahil)
     const igs = igListSorted();
+
+    // İmza-guard: veri (handle + ad + yoksayma listesi) değişmedıyse DOM
+    // rebuild'i atla — liste açıkken her scan'de yüzlerce satır yeniden
+    // kuruluyordu; ölçümlerde listenin en pahalı parçasıydı.
+    const sig = rows.map(([h, v]) => h + '|' + (v.name || '')).join('\n') +
+      ' ## ' + igs.map((g) => g.h + '|' + (g.name || '')).join('\n');
+    if (sig === S.listSig && !scrollToIg) return;
+    S.listSig = sig;
 
     r.lh.textContent = 'Takip etmeyenler (' + rows.length + ')' + (igs.length ? ' · 🚫 yoksayılan ' + igs.length : '');
     r.lb.innerHTML = '';
@@ -729,7 +757,13 @@
       if (!v.followsYou && !S.ignored.has(h)) rows.push([h, v.name || '']);
     }
     rows.sort((a, b) => a[0].localeCompare(b[0]));
-    const esc = (s) => '"' + String(s).replace(/"/g, '""') + '"';
+    // CSV formül enjeksiyonu koruması (OWASP): =, +, -, @, tab, CR ile başlayan
+    // hücrelere ' öneki → Excel/Sheets bunu formül olarak çalıştırmaz.
+    const esc = (s) => {
+      const t = String(s);
+      const v = /^[=+\-@\t\r]/.test(t) ? "'" + t : t;
+      return '"' + v.replace(/"/g, '""') + '"';
+    };
     let csv = '\ufeffhandle,Ad\n' + rows.map(r => esc(r[0]) + ',' + esc(r[1])).join('\n');
     if (!rows.length) csv += '(boş)\n';
 
@@ -749,6 +783,7 @@
   // ------------------------------------------------------------------
   async function runUnfollow() {
     if (S.unf.running) return;
+    await igReady; // yoksayma listesi IndexedDB'den dolmadan hedef seçme (yarış koruması)
     S.unf.running = true;
     S.unf.stop = false;
     S.unf.done = 0;
@@ -770,6 +805,10 @@
     try {
       for (;;) {
         if (!S.running || S.unf.stop) break;
+        if (S.unf.done >= UNF_MAX_SESSION) {
+          hintOnce('✔ Bu oturumda ' + UNF_MAX_SESSION + ' hesap çıkarıldı — tavan doldu. Devam etmek için tekrar başlat.', 4000);
+          break;
+        }
 
         const row = nextTarget();
         if (!row) {
@@ -851,6 +890,7 @@
     S.running = true;
     S.zeroScans = 0;
     S.nfRows = [];
+    lastPaintSig = 'reset'; // start sonrasındaki ilk paint garantili yazılır
     // İlk yakalamalar: sayfa henüz yükleniyor olabilir
     [0, 400, 1200].forEach((d) => setTimeout(scan, d));
 
@@ -862,8 +902,9 @@
   function stop(auto) {
     S.unf.stop = true;              // toplu çıkarma döngüsünü bitecek
     hideHover();
-    document.removeEventListener('mousemove', onHoverMove, true);
+    document.removeEventListener('mousemove', scheduleHover, true);
     document.removeEventListener('scroll', hideHover, true);
+    cancelAnimationFrame(hoverRaf); hoverRaf = 0; hoverEvt = null;
     if (S.hoverBtn) { S.hoverBtn.remove(); S.hoverBtn = null; }
     if (!S.running && !S.unf.running) return status();
     S.running = false;
@@ -873,9 +914,11 @@
 
     clearMarks();
     if (S.styleEl) { S.styleEl.remove(); S.styleEl = null; }
-    if (S.widget) { S.widget.remove(); S.widget = null; S.listEl = null; S.bUnfEl = null; S.igLinkEl = null; }
+    if (S.widget) { S.widget.remove(); S.widget = null; S.listEl = null; S.wrefs = null; }
 
     S.listOpen = false;
+    S.listSig = '';
+    lastPaintSig = 'reset'; // sonraki paint değişimi kaçırmasın
     S.zeroScans = 0;
     S.screen = { total: 0, follow: 0, noFollow: 0 };
     S.seen.clear();          // RAM'i serbest bırak
@@ -919,6 +962,7 @@
         }
         S.listOpen = !S.listOpen;
         S.listEl.hidden = !S.listOpen;
+        if (!S.listOpen) S.listSig = '';
         paint();
         if (S.listOpen) renderList();
         sendResponse({ ok: true, listOpen: S.listOpen });

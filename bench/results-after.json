@@ -1,0 +1,62 @@
+{
+  "boot_ms": 18,
+  "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+  "started": null,
+  "scenarios": {
+    "A": {
+      "label": "scroll churn: append row + scan (list closed)",
+      "ticks": 120,
+      "mean": 0.17,
+      "p50": 0.2,
+      "p95": 0.3,
+      "max": 0.6,
+      "final": 0.2
+    },
+    "B": {
+      "label": "list OPEN, state unchanged: DOM churn + scan + paint/renderList",
+      "ticks": 60,
+      "mean": 0.22,
+      "p50": 0.2,
+      "p95": 0.4,
+      "max": 0.4
+    },
+    "B2": {
+      "label": "list OPEN, visible name churn → renderList rebuild",
+      "ticks": 60,
+      "mean": 0.4,
+      "p50": 0.5,
+      "p95": 0.7,
+      "max": 0.8
+    },
+    "C": {
+      "label": "hover: 30 mousemove events over a row (per burst)",
+      "burst_mean": 19.7,
+      "dispatch_mean": 0.0333,
+      "bursts": [
+        2.2,
+        23.6,
+        33.3
+      ]
+    },
+    "C2": {
+      "label": "hover throttle proof: 300 mousemove in one burst",
+      "dispatch_ms": 0.1
+    },
+    "D": {
+      "label": "getStatus ×200 (popup 700ms ticker)",
+      "total_ms": 0.4
+    }
+  },
+  "checks": {
+    "owner_path": "bench",
+    "nfCount": 135,
+    "nfCount_expected": 135,
+    "nfCount_pass": true,
+    "list_rows": 135,
+    "list_rows_expected": 135,
+    "list_pass": true,
+    "marked_nf": 135,
+    "marked_pass": true,
+    "all_pass": true
+  }
+}
